@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>译境 · 中英全自动语音与文字互译</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    :root {
+      --bg-canvas: #F7F6F2;
+      --bg-surface: #FFFFFF;
+      --bg-subtle: #F0EFE9;
+      --border-hairline: #E4E1D8;
+      --border-strong: #CFCBC0;
+      --ink-primary: #17191E;
+      --ink-secondary: #5B616E;
+      --ink-muted: #8A909E;
+      --accent-primary: #0F5C4D;
+      --accent-primary-hover: #0B473B;
+      --accent-soft: #E8F2EF;
+      --voice-active: #C83E37;
+      --voice-soft: #FCECEB;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-canvas);
+      color: var(--ink-primary);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    .surface-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .surface-subtle {
+      background-color: var(--bg-subtle);
+    }
+
+    .btn-primary {
+      background-color: var(--accent-primary);
+      color: #FFFFFF;
+      transition: background-color 150ms ease, transform 100ms ease;
+    }
+    .btn-primary:hover {
+      background-color: var(--accent-primary-hover);
+    }
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-ghost {
+      color: var(--ink-secondary);
+      transition: background-color 150ms ease, color 150ms ease;
+    }
+    .btn-ghost:hover {
+      background-color: var(--bg-subtle);
+      color: var(--ink-primary);
+    }
+
+    .btn-voice-active {
+      background-color: var(--voice-active) !important;
+      color: #FFFFFF !important;
+      border-color: var(--voice-active) !important;
+    }
+
+    .tab-active {
+      background-color: var(--bg-surface);
+      color: var(--ink-primary);
+      box-shadow: 0 1px 2px rgba(23, 25, 30, 0.08);
+    }
+
+    .tab-inactive {
+      color: var(--ink-secondary);
+    }
+    .tab-inactive:hover {
+      color: var(--ink-primary);
+    }
+
+    .textarea-clean {
+      resize: none;
+      outline: none;
+      background: transparent;
+      color: var(--ink-primary);
+    }
+    .textarea-clean::placeholder {
+      color: var(--ink-muted);
+    }
+
+    /* Subtle waveform animation for active voice recording */
+    @keyframes wavePulse {
+      0%, 100% { transform: scaleY(0.35); }
+      50% { transform: scaleY(1); }
+    }
+    .wave-bar {
+      width: 3px;
+      height: 16px;
+      border-radius: 999px;
+      background-color: currentColor;
+      animation: wavePulse 0.9s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .wave-bar:nth-child(2) { animation-delay: 0.15s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.3s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.45s; }
+
+    @keyframes subtleSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-slow {
+      animation: subtleSpin 1s linear infinite;
+    }
+
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D5D2C8;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #B8B4A8;
+    }
+
+    .toggle-track {
+      background-color: #D5D2C8;
+      transition: background-color 150ms ease;
+    }
+    .toggle-thumb {
+      transform: translateX(0);
+      transition: transform 150ms ease;
+    }
+    #toggle-autospeak:checked + .toggle-track {
+      background-color: var(--accent-primary);
+    }
+    #toggle-autospeak:checked + .toggle-track .toggle-thumb {
+      transform: translateX(14px);
+    }
+
+    .toast-enter {
+      animation: toastSlideIn 200ms ease-out forwards;
+    }
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translate(-50%, 12px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Header -->
+  <header class="w-full border-b border-[#E4E1D8] bg-[#FFFFFF]/90 backdrop-blur-sm sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <!-- Brand -->
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-[#0F5C4D] flex items-center justify-center text-white shrink-0" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 8l6 6"></path>
+            <path d="M4 14l6-6 2-3"></path>
+            <path d="M2 5h12"></path>
+            <path d="M7 2h1"></path>
+            <path d="M22 22l-5-10-5 10"></path>
+            <path d="M14 18h6"></path>
+          </svg>
+        </div>
+        <div class="leading-tight truncate">
+          <h1 class="text-[15px] font-semibold tracking-tight text-[#17191E] truncate">译境 · 中英全自动互译</h1>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <nav class="flex items-center p-1 rounded-lg bg-[#F0EFE9] border border-[#E4E1D8] shrink-0" aria-label="翻译模式">
+        <button id="tab-standard" type="button" class="px-3 py-1.5 text-xs sm:text-[13px] font-medium rounded-md transition-all tab-active">
+          文字与语音
+        </button>
+        <button id="tab-dialogue" type="button" class="px-3 py-1.5 text-xs sm:text-[13px] font-medium rounded-md transition-all tab-inactive">
+          双语对话
+        </button>
+      </nav>
+
+      <!-- Right Controls: Engine Badge & History -->
+      <div class="flex items-center gap-2 shrink-0">
+        <span id="engine-badge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#E8F2EF] text-[#0F5C4D] border border-[#CBE2DB]" title="当前使用的翻译引擎">
+          <span id="engine-dot" class="w-1.5 h-1.5 rounded-full bg-[#0F5C4D]"></span>
+          <span id="engine-label">自动在线引擎</span>
+        </span>
+        <button id="btn-toggle-history" type="button" class="btn-ghost relative inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs sm:text-[13px] font-medium border border-transparent hover:border-[#E4E1D8]" title="查看翻译历史">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span class="hidden md:inline">记录</span>
+          <span id="history-count" class="hidden text-[11px] font-semibold px-1.5 py-0.2 rounded-full bg-[#E8F2EF] text-[#0F5C4D]">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-7 flex flex-col gap-5">
+
+    <!-- Global Controls Bar: Direction + Auto-Speak + Speech Rate -->
+    <section class="flex flex-wrap items-center justify-between gap-3">
+      <!-- Language Direction Control -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="inline-flex items-center p-1 rounded-lg bg-[#FFFFFF] border border-[#E4E1D8]" role="group" aria-label="翻译方向">
+          <button id="dir-auto" type="button" data-dir="auto" class="dir-btn px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-colors bg-[#0F5C4D] text-white">
+            自动检测 ⇄
+          </button>
+          <button id="dir-zh-en" type="button" data-dir="zh-en" class="dir-btn px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-colors text-[#5B616E] hover:text-[#17191E]">
+            中 → 英
+          </button>
+          <button id="dir-en-zh" type="button" data-dir="en-zh" class="dir-btn px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-colors text-[#5B616E] hover:text-[#17191E]">
+            英 → 中
+          </button>
+        </div>
+        <button id="btn-swap" type="button" class="surface-card btn-ghost p-2 rounded-lg" title="互换原文与译文" aria-label="互换原文与译文">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Speech Settings -->
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="inline-flex items-center gap-2 text-xs sm:text-[13px] text-[#5B616E] cursor-pointer select-none">
+          <input id="toggle-autospeak" type="checkbox" class="sr-only peer" checked>
+          <span class="toggle-track w-8 h-[18px] relative inline-flex items-center rounded-full p-0.5">
+            <span class="toggle-thumb w-3.5 h-3.5 rounded-full bg-white shadow-sm"></span>
+          </span>
+          <span class="font-medium text-[#17191E]">自动朗读译文</span>
+        </label>
+
+        <div class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#FFFFFF] border border-[#E4E1D8] text-xs text-[#5B616E]">
+          <span>语速</span>
+          <select id="select-rate" aria-label="朗读语速" class="bg-transparent font-medium text-[#17191E] focus:outline-none cursor-pointer">
+            <option value="0.8">0.8x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="1.2">1.2x</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Voice Browser Support Notice (Hidden unless unsupported or permission error) -->
+    <div id="voice-notice" class="hidden rounded-xl border border-[#E8CFCB] bg-[#FCECEB] px-4 py-3 text-xs sm:text-[13px] text-[#8E2B26] flex items-start justify-between gap-3">
+      <div class="flex items-start gap-2.5">
+        <svg class="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <p id="voice-notice-text" class="leading-relaxed"></p>
+      </div>
+      <button id="btn-close-notice" type="button" class="text-[#8E2B26] hover:opacity-75 shrink-0" aria-label="关闭提示">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <!-- VIEW 1: STANDARD TEXT + VOICE TRANSLATOR -->
+    <section id="view-standard" class="flex flex-col gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Source Panel -->
+        <div class="surface-card rounded-2xl flex flex-col min-h-[260px] sm:min-h-[300px] transition-shadow focus-within:ring-2 focus-within:ring-[#0F5C4D]/20 focus-within:border-[#0F5C4D]">
+          <!-- Panel Header -->
+          <div class="px-4 py-3 border-b border-[#E4E1D8] flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span id="source-lang-tag" class="text-xs font-semibold uppercase tracking-wider text-[#0F5C4D] bg-[#E8F2EF] px-2 py-0.5 rounded">
+                自动检测
+              </span>
+              <span id="detected-hint" class="text-xs text-[#8A909E] truncate">输入中文或英文即刻翻译</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button id="btn-speak-source" type="button" class="btn-ghost p-1.5 rounded-lg" title="朗读原文" aria-label="朗读原文">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg>
+              </button>
+              <button id="btn-clear" type="button" class="btn-ghost p-1.5 rounded-lg" title="清空原文" aria-label="清空原文">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Source Textarea -->
+          <div class="flex-1 p-4 flex flex-col">
+            <textarea
+              id="source-input"
+              class="textarea-clean w-full flex-1 text-base sm:text-[17px] leading-relaxed"
+              placeholder="在此输入或点击下方麦克风说话，系统会自动识别中英文并实时翻译..."
+              maxlength="3000"
+              spellcheck="false"
+            ></textarea>
+            <!-- Interim Speech Preview -->
+            <div id="interim-preview" class="hidden mt-2 text-xs text-[#0F5C4D] bg-[#E8F2EF] px-2.5 py-1.5 rounded-lg flex items-center gap-2">
+              <span class="inline-flex items-center gap-0.5 text-[#C83E37] h-3">
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+              </span>
+              <span id="interim-text" class="truncate">正在聆听...</span>
+            </div>
+          </div>
+
+          <!-- Source Footer Toolbar -->
+          <div class="px-4 py-3 border-t border-[#E4E1D8] flex flex-wrap items-center justify-between gap-2 bg-[#FAF9F6] rounded-b-2xl">
+            <div class="flex items-center gap-2">
+              <!-- Voice Input Button -->
+              <button id="btn-mic-standard" type="button" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-[13px] font-medium border border-[#CFCBC0] bg-white text-[#17191E] hover:border-[#0F5C4D] hover:text-[#0F5C4D] transition-all">
+                <svg id="mic-icon-idle" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+                <span id="mic-wave-active" class="hidden items-center gap-0.5 h-3.5">
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                </span>
+                <span id="mic-label">语音输入</span>
+              </button>
+
+              <!-- Speech Recognition Language Selector -->
+              <select id="select-voice-lang" aria-label="语音识别语言" class="px-2.5 py-2 rounded-xl text-xs font-medium bg-white border border-[#E4E1D8] text-[#5B616E] focus:outline-none focus:border-[#0F5C4D] cursor-pointer">
+                <option value="zh-CN">听中文</option>
+                <option value="en-US">听英文</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <span id="char-count" class="text-xs text-[#8A909E] tabular-nums">0 / 3000</span>
+              <button id="btn-translate-now" type="button" class="btn-primary px-3.5 py-1.5 rounded-lg text-xs sm:text-[13px] font-medium">
+                立即翻译
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Target Panel -->
+        <div class="surface-card rounded-2xl flex flex-col min-h-[260px] sm:min-h-[300px] bg-[#FCFBF8]">
+          <!-- Panel Header -->
+          <div class="px-4 py-3 border-b border-[#E4E1D8] flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span id="target-lang-tag" class="text-xs font-semibold uppercase tracking-wider text-[#5B616E] bg-[#F0EFE9] px-2 py-0.5 rounded">
+                译文
+              </span>
+              <span id="status-indicator" class="text-xs text-[#8A909E] flex items-center gap-1.5 truncate">
+                等待输入
+              </span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button id="btn-speak-target" type="button" class="btn-ghost p-1.5 rounded-lg" title="朗读译文" aria-label="朗读译文">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg>
+              </button>
+              <button id="btn-copy-target" type="button" class="btn-ghost p-1.5 rounded-lg" title="复制译文" aria-label="复制译文">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Translation Output -->
+          <div class="flex-1 p-4 flex flex-col justify-between">
+            <div id="target-output" class="w-full flex-1 text-base sm:text-[17px] leading-relaxed text-[#17191E] whitespace-pre-wrap break-words"><span class="text-[#8A909E]">翻译结果将在此实时呈现...</span></div>
+
+            <!-- Subtle Engine / Metadata Footer -->
+            <div id="translation-meta" class="hidden mt-3 pt-2.5 border-t border-[#E4E1D8]/70 flex items-center justify-between text-xs text-[#8A909E]">
+              <span id="meta-source-info"></span>
+              <span id="meta-latency"></span>
+            </div>
+          </div>
+
+          <!-- Target Footer Actions -->
+          <div class="px-4 py-3 border-t border-[#E4E1D8] flex items-center justify-between gap-2 bg-[#F5F4EE] rounded-b-2xl">
+            <span id="output-char-count" class="text-xs text-[#8A909E] tabular-nums">0 字符</span>
+            <div class="flex items-center gap-2">
+              <button id="btn-stop-speak" type="button" class="hidden px-2.5 py-1.5 rounded-lg text-xs font-medium bg-[#FCECEB] text-[#C83E37] hover:opacity-90">
+                停止朗读
+              </button>
+              <button id="btn-use-as-input" type="button" class="btn-ghost px-2.5 py-1.5 rounded-lg text-xs font-medium" title="将译文回填到原文框进行反向校对">
+                反向回译
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Sample Phrases -->
+      <div class="surface-card rounded-2xl p-4">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-[#5B616E]">快捷试译示例</h2>
+          <span class="text-xs text-[#8A909E]">点击即刻体验自动语言识别与互译</span>
+        </div>
+        <div id="sample-phrases" class="flex flex-wrap gap-2">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: BILINGUAL LIVE DIALOGUE MODE -->
+    <section id="view-dialogue" class="hidden flex-col gap-4">
+      <div class="surface-card rounded-2xl flex flex-col overflow-hidden">
+        <!-- Dialogue Header -->
+        <div class="px-4 py-3 border-b border-[#E4E1D8] flex items-center justify-between gap-2 bg-[#FAF9F6]">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[#0F5C4D]"></span>
+            <span class="text-sm font-semibold text-[#17191E]">面对面双语语音对话</span>
+            <span class="hidden sm:inline text-xs text-[#8A909E]">点击下方对应语言按钮开口说话，自动翻译并朗读</span>
+          </div>
+          <button id="btn-clear-dialogue" type="button" class="btn-ghost px-2.5 py-1 rounded-lg text-xs font-medium">
+            清空对话
+          </button>
+        </div>
+
+        <!-- Dialogue Stream -->
+        <div id="dialogue-stream" class="p-4 sm:p-5 min-h-[280px] max-h-[420px] overflow-y-auto flex flex-col gap-3 bg-[#F7F6F2]/60">
+          <div id="dialogue-empty" class="my-auto py-10 text-center flex flex-col items-center gap-2">
+            <div class="w-11 h-11 rounded-full bg-[#E8F2EF] text-[#0F5C4D] flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
+            <p class="text-sm font-medium text-[#17191E]">准备好开始双语对话</p>
+            <p class="text-xs text-[#8A909E] max-w-sm">点击左侧「说中文」或右侧「Speak English」即可实时语音互译，也可以在下方直接输入文字发送。</p>
+          </div>
+        </div>
+
+        <!-- Live Dialogue Interim Bar -->
+        <div id="dialogue-interim-bar" class="hidden px-4 py-2 bg-[#E8F2EF] border-t border-[#CBE2DB] text-xs text-[#0F5C4D] flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="inline-flex items-center gap-0.5 text-[#C83E37] h-3 shrink-0">
+              <span class="wave-bar"></span>
+              <span class="wave-bar"></span>
+              <span class="wave-bar"></span>
+            </span>
+            <span id="dialogue-interim-text" class="truncate font-medium">正在聆听...</span>
+          </div>
+          <button id="btn-stop-dialogue-mic" type="button" class="text-xs font-semibold text-[#C83E37] shrink-0">停止</button>
+        </div>
+
+        <!-- Dialogue Controls -->
+        <div class="p-4 border-t border-[#E4E1D8] bg-white flex flex-col gap-3">
+          <div class="grid grid-cols-2 gap-3">
+            <button id="btn-dialogue-zh" type="button" class="flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border border-[#0F5C4D] bg-[#0F5C4D] text-white font-medium text-sm hover:bg-[#0B473B] transition-all">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+              </svg>
+              <span>说中文 · 译英文</span>
+            </button>
+            <button id="btn-dialogue-en" type="button" class="flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border border-[#17191E] bg-[#17191E] text-white font-medium text-sm hover:bg-[#2C303A] transition-all">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+              </svg>
+              <span>Speak English · 译中文</span>
+            </button>
+          </div>
+
+          <!-- Text fallback input in Dialogue mode -->
+          <form id="dialogue-text-form" class="flex items-center gap-2">
+            <input
+              id="dialogue-text-input"
+              type="text"
+              class="flex-1 px-3.5 py-2 rounded-xl border border-[#E4E1D8] bg-[#FAF9F6] text-sm text-[#17191E] focus:outline-none focus:border-[#0F5C4D] focus:bg-white"
+              placeholder="也可以直接输入中文或英文回车发送，自动识别并翻译..."
+              autocomplete="off"
+            >
+            <button type="submit" class="btn-primary px-4 py-2 rounded-xl text-sm font-medium shrink-0">发送</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Collapsible History Drawer -->
+    <section id="history-panel" class="hidden surface-card rounded-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-[#E4E1D8] flex items-center justify-between gap-2 bg-[#FAF9F6]">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-semibold text-[#17191E]">翻译历史记录</h2>
+          <span id="history-subtitle" class="text-xs text-[#8A909E]">仅保存在本地浏览器</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-clear-history" type="button" class="btn-ghost px-2.5 py-1 rounded-lg text-xs font-medium text-[#C83E37]">
+            清空记录
+          </button>
+          <button id="btn-close-history" type="button" class="btn-ghost p-1 rounded-lg" aria-label="收起历史记录">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="history-list" class="divide-y divide-[#E4E1D8] max-h-72 overflow-y-auto">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Subtle Footer -->
+  <footer class="w-full border-t border-[#E4E1D8] bg-[#FFFFFF]/60 mt-auto">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#8A909E]">
+      <span>快捷键：Ctrl/Cmd + Enter 立即翻译 · Esc 停止语音</span>
+      <span>支持浏览器原生语音识别与朗读 · 自动在线翻译与离线词句兜底</span>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#17191E] text-white text-xs sm:text-[13px] font-medium shadow-lg pointer-events-none">
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================
+      // 1. Offline Bilingual Phrasebook & Fallback Dictionary
+      // =========================================================
+      const OFFLINE_PHRASES = [
+        { zh: '你好，请问附近有地铁站吗？', en: 'Hello, is there a subway station nearby?' },
+        { zh: '很高兴见到你，我们开始今天的会议吧。', en: 'Nice to meet you. Let us start today\'s meeting.' },
+        { zh: '请给我一杯不加糖的冰美式咖啡，谢谢。', en: 'Could I have an iced Americano without sugar, please? Thank you.' },
+        { zh: '这个方案的核心优势是成本更低、上线更快。', en: 'The core advantage of this plan is lower cost and faster launch.' },
+        { zh: '你好', en: 'Hello' },
+        { zh: '谢谢你', en: 'Thank you' },
+        { zh: '非常感谢', en: 'Thank you very much' },
+        { zh: '不客气', en: 'You\'re welcome' },
+        { zh: '对不起', en: 'I\'m sorry' },
+        { zh: '没关系', en: 'It\'s okay' },
+        { zh: '早上好', en: 'Good morning' },
+        { zh: '下午好', en: 'Good afternoon' },
+        { zh: '晚上好', en: 'Good evening' },
+        { zh: '晚安', en: 'Good night' },
+        { zh: '再见', en: 'Goodbye' },
+        { zh: '请问洗手间在哪里？', en: 'Excuse me, where is the restroom?' },
+        { zh: '这个多少钱？', en: 'How much is this?' },
+        { zh: '请说慢一点。', en: 'Please speak more slowly.' },
+        { zh: '我听不懂，可以再说一遍吗？', en: 'I didn\'t understand. Could you say that again?' },
+        { zh: '我们需要在周五前完成这个项目。', en: 'We need to finish this project before Friday.' },
+        { zh: '今天天气真不错。', en: 'The weather is really nice today.' },
+        { zh: '请问可以刷卡吗？', en: 'Excuse me, can I pay by card?' },
+        { zh: '请帮我叫一辆出租车。', en: 'Please help me call a taxi.' },
+        { zh: '你今天过得怎么样？', en: 'How are you doing today?' },
+        { en: 'Can we reschedule our meeting to tomorrow afternoon?', zh: '我们可以把会议改到明天下午吗？' },
+        { en: 'Could you send me the updated document when you have a moment?', zh: '你方便的时候可以把更新后的文档发给我吗？' },
+        { en: 'Where is the nearest airport shuttle stop?', zh: '最近的机场大巴站在哪里？' }
+      ];
+
+      const SAMPLE_CHIPS = [
+        { label: '旅行问路', text: '你好，请问附近有地铁站吗？' },
+        { label: '商务会议', text: 'Can we reschedule our meeting to tomorrow afternoon?' },
+        { label: '咖啡点单', text: '请给我一杯不加糖的冰美式咖啡，谢谢。' },
+        { label: '产品沟通', text: 'Could you send me the updated document when you have a moment?' }
+      ];
+
+      const MINI_DICT_ZH_EN = {
+        '你好': 'hello', '世界': 'world', '谢谢': 'thank you', '请': 'please',
+        '今天': 'today', '明天': 'tomorrow', '昨天': 'yesterday', '会议': 'meeting',
+        '翻译': 'translation', '语音': 'voice', '文字': 'text', '电脑': 'computer',
+        '手机': 'phone', '咖啡': 'coffee', '餐厅': 'restaurant', '机场': 'airport',
+        '酒店': 'hotel', '地铁': 'subway', '问题': 'question', '时间': 'time',
+        '工作': 'work', '项目': 'project', '朋友': 'friend', '欢迎': 'welcome'
+      };
+
+      const MINI_DICT_EN_ZH = {
+        'hello': '你好', 'hi': '嗨', 'world': '世界', 'thanks': '谢谢', 'thank': '谢谢',
+        'please': '请', 'today': '今天', 'tomorrow': '明天', 'yesterday': '昨天',
+        'meeting': '会议', 'translate': '翻译', 'translation': '翻译', 'voice': '语音',
+        'text': '文字', 'coffee': '咖啡', 'restaurant': '餐厅', 'airport': '机场',
+        'hotel': '酒店', 'subway': '地铁', 'question': '问题', 'time': '时间',
+        'work': '工作', 'project': '项目', 'friend': '朋友', 'welcome': '欢迎',
+        'yes': '是的', 'no': '不是', 'good': '好', 'morning': '早上好', 'night': '晚安'
+      };
+
+      // =========================================================
+      // 2. Application State
+      // =========================================================
+      const state = {
+        mode: 'standard',          // 'standard' | 'dialogue'
+        direction: 'auto',         // 'auto' | 'zh-en' | 'en-zh'
+        autoSpeak: true,
+        speechRate: 1.0,
+        voiceInputLang: 'zh-CN',   // 'zh-CN' | 'en-US'
+        isListening: false,
+        listeningContext: null,    // 'standard' | 'dialogue-zh' | 'dialogue-en'
+        isSpeaking: false,
+        lastSourceText: '',
+        lastTranslatedText: '',
+        lastSourceLang: 'zh-CN',
+        lastTargetLang: 'en-US',
+        lastEngine: '自动在线引擎',
+        historyOpen: false,
+        history: [],
+        dialogueMessages: [],
+        cache: new Map(),
+        debounceTimer: null,
+        activeController: null,
+        recognition: null
+      };
+
+      // Load persisted history safely
+      try {
+        const saved = localStorage.getItem('yijing_translate_history_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            state.history = parsed.slice(0, 30);
+          }
+        }
+      } catch (e) {
+        // Ignore storage restrictions
+      }
+
+      // =========================================================
+      // 3. DOM References
+      // =========================================================
+      const el = {
+        tabStandard: document.getElementById('tab-standard'),
+        tabDialogue: document.getElementById('tab-dialogue'),
+        viewStandard: document.getElementById('view-standard'),
+        viewDialogue: document.getElementById('view-dialogue'),
+        dirBtns: document.querySelectorAll('.dir-btn'),
+        btnSwap: document.getElementById('btn-swap'),
+        toggleAutospeak: document.getElementById('toggle-autospeak'),
+        selectRate: document.getElementById('select-rate'),
+        engineBadge: document.getElementById('engine-badge'),
+        engineDot: document.getElementById('engine-dot'),
+        engineLabel: document.getElementById('engine-label'),
+        btnToggleHistory: document.getElementById('btn-toggle-history'),
+        historyCount: document.getElementById('history-count'),
+        historyPanel: document.getElementById('history-panel'),
+        historyList: document.getElementById('history-list'),
+        btnClearHistory: document.getElementById('btn-clear-history'),
+        btnCloseHistory: document.getElementById('btn-close-history'),
+        voiceNotice: document.getElementById('voice-notice'),
+        voiceNoticeText: document.getElementById('voice-notice-text'),
+        btnCloseNotice: document.getElementById('btn-close-notice'),
+
+        // Standard view
+        sourceInput: document.getElementById('source-input'),
+        sourceLangTag: document.getElementById('source-lang-tag'),
+        detectedHint: document.getElementById('detected-hint'),
+        targetLangTag: document.getElementById('target-lang-tag'),
+        targetOutput: document.getElementById('target-output'),
+        statusIndicator: document.getElementById('status-indicator'),
+        charCount: document.getElementById('char-count'),
+        outputCharCount: document.getElementById('output-char-count'),
+        interimPreview: document.getElementById('interim-preview'),
+        interimText: document.getElementById('interim-text'),
+        btnMicStandard: document.getElementById('btn-mic-standard'),
+        micIconIdle: document.getElementById('mic-icon-idle'),
+        micWaveActive: document.getElementById('mic-wave-active'),
+        micLabel: document.getElementById('mic-label'),
+        selectVoiceLang: document.getElementById('select-voice-lang'),
+        btnTranslateNow: document.getElementById('btn-translate-now'),
+        btnSpeakSource: document.getElementById('btn-speak-source'),
+        btnSpeakTarget: document.getElementById('btn-speak-target'),
+        btnStopSpeak: document.getElementById('btn-stop-speak'),
+        btnCopyTarget: document.getElementById('btn-copy-target'),
+        btnClear: document.getElementById('btn-clear'),
+        btnUseAsInput: document.getElementById('btn-use-as-input'),
+        translationMeta: document.getElementById('translation-meta'),
+        metaSourceInfo: document.getElementById('meta-source-info'),
+        metaLatency: document.getElementById('meta-latency'),
+        samplePhrases: document.getElementById('sample-phrases'),
+
+        // Dialogue view
+        dialogueStream: document.getElementById('dialogue-stream'),
+        dialogueEmpty: document.getElementById('dialogue-empty'),
+        dialogueInterimBar: document.getElementById('dialogue-interim-bar'),
+        dialogueInterimText: document.getElementById('dialogue-interim-text'),
+        btnStopDialogueMic: document.getElementById('btn-stop-dialogue-mic'),
+        btnDialogueZh: document.getElementById('btn-dialogue-zh'),
+        btnDialogueEn: document.getElementById('btn-dialogue-en'),
+        btnClearDialogue: document.getElementById('btn-clear-dialogue'),
+        dialogueTextForm: document.getElementById('dialogue-text-form'),
+        dialogueTextInput: document.getElementById('dialogue-text-input'),
+
+        toast: document.getElementById('toast')
+      };
+
+      // =========================================================
+      // 4. Utilities: Language Detection, Toast, Clipboard, Escape
+      // =========================================================
+      function detectLanguage(text) {
+        const cleaned = (text || '').trim();
+        if (!cleaned) return 'zh-CN';
+        const cjkMatches = cleaned.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || [];
+        const latinMatches = cleaned.match(/[A-Za-z]/g) || [];
+        if (cjkMatches.length === 0 && latinMatches.length > 0) return 'en-US';
+        if (cjkMatches.length > 0 && latinMatches.length === 0) return 'zh-CN';
+        // Mixed text: if Chinese characters account for >= 18% of letters, treat as Chinese
+        const total = cjkMatches.length + latinMatches.length;
+        if (total === 0) return 'zh-CN';
+        return (cjkMatches.length / total) >= 0.18 ? 'zh-CN' : 'en-US';
+      }
+
+      function resolveLangPair(text, forcedSourceLang) {
+        if (forcedSourceLang) {
+          return forcedSourceLang === 'zh-CN'
+            ? { src: 'zh-CN', tgt: 'en-US' }
+            : { src: 'en-US', tgt: 'zh-CN' };
+        }
+        if (state.direction === 'zh-en') return { src: 'zh-CN', tgt: 'en-US' };
+        if (state.direction === 'en-zh') return { src: 'en-US', tgt: 'zh-CN' };
+        const detected = detectLanguage(text);
+        return detected === 'zh-CN'
+          ? { src: 'zh-CN', tgt: 'en-US' }
+          : { src: 'en-US', tgt: 'zh-CN' };
+      }
+
+      function langDisplayName(code) {
+        return code === 'zh-CN' ? '中文' : 'English';
+      }
+
+      let toastTimer = null;
+      function showToast(message) {
+        if (!message) return;
+        el.toast.textContent = message;
+        el.toast.classList.remove('hidden', 'toast-enter');
+        void el.toast.offsetWidth;
+        el.toast.classList.add('toast-enter');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          el.toast.classList.add('hidden');
+        }, 2400);
+      }
+
+      function showVoiceNotice(message) {
+        el.voiceNoticeText.textContent = message;
+        el.voiceNotice.classList.remove('hidden');
+      }
+
+      function hideVoiceNotice() {
+        el.voiceNotice.classList.add('hidden');
+      }
+
+      function copyText(text) {
+        if (!text) {
+          showToast('暂无可复制的内容');
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('已复制到剪贴板');
+          }).catch(() => fallbackCopy(text));
+        } else {
+          fallbackCopy(text);
+        }
+      }
+
+      function fallbackCopy(text) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showToast('已复制到剪贴板');
+        } catch (e) {
+          showToast('复制失败，请手动选中复制');
+        }
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatTime(ts) {
+        const d = new Date(ts);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+
+      // =========================================================
+      // 5. Translation Engine (Multi-Provider + Offline Fallback)
+      // =========================================================
+      function lookupOfflineTranslation(text, src, tgt) {
+        const norm = text.trim().toLowerCase().replace(/[。？！.?!]+$/, '');
+        for (const item of OFFLINE_PHRASES) {
+          const srcField = src === 'zh-CN' ? item.zh : item.en;
+          const tgtField = tgt === 'zh-CN' ? item.zh : item.en;
+          if (!srcField || !tgtField) continue;
+          const candidate = srcField.trim().toLowerCase().replace(/[。？！.?!]+$/, '');
+          if (candidate === norm) {
+            return { text: tgtField, exact: true };
+          }
+        }
+
+        // Token-level mini dictionary fallback for offline resilience
+        if (src === 'en-US') {
+          const words = text.trim().split(/\s+/);
+          let hits = 0;
+          const mapped = words.map(w => {
+            const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+            if (MINI_DICT_EN_ZH[clean]) {
+              hits++;
+              return MINI_DICT_EN_ZH[clean];
+            }
+            return w;
+          });
+          if (hits > 0) {
+            return { text: mapped.join(' '), exact: false };
+          }
+        } else {
+          let result = text;
+          let hits = 0;
+          for (const [k, v] of Object.entries(MINI_DICT_ZH_EN)) {
+            if (result.includes(k)) {
+              result = result.split(k).join(` ${v} `);
+              hits++;
+            }
+          }
+          if (hits > 0) {
+            return { text: result.replace(/\s+/g, ' ').trim(), exact: false };
+          }
+        }
+        return null;
+      }
+
+      async function translateViaGoogleGtx(text, src, tgt, signal) {
+        const sl = src === 'zh-CN' ? 'zh-CN' : 'en';
+        const tl = tgt === 'zh-CN' ? 'zh-CN' : 'en';
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
+        const resp = await fetch(url, { signal });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!Array.isArray(data) || !Array.isArray(data[0])) {
+          throw new Error('Unexpected response format');
+        }
+        const translated = data[0].map(seg => (Array.isArray(seg) && seg[0]) ? seg[0] : '').join('');
+        if (!translated.trim()) throw new Error('Empty translation');
+        return translated.trim();
+      }
+
+      async function translateViaMyMemory(text, src, tgt, signal) {
+        const pair = src === 'zh-CN' ? 'zh-CN|en' : 'en|zh-CN';
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(pair)}`;
+        const resp = await fetch(url, { signal });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const translated = data && data.responseData && data.responseData.translatedText;
+        if (!translated || !translated.trim()) throw new Error('Empty MyMemory translation');
+        return translated.trim();
+      }
+
+      function updateEngineBadge(engineName, isOffline) {
+        state.lastEngine = engineName;
+        el.engineLabel.textContent = engineName;
+        if (isOffline) {
+          el.engineBadge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#F4EFE4] text-[#855B19] border border-[#E5D7B8]';
+          el.engineDot.className = 'w-1.5 h-1.5 rounded-full bg-[#B57B1E]';
+        } else {
+          el.engineBadge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#E8F2EF] text-[#0F5C4D] border border-[#CBE2DB]';
+          el.engineDot.className = 'w-1.5 h-1.5 rounded-full bg-[#0F5C4D]';
+        }
+      }
+
+      async function performTranslation(text, forcedSourceLang) {
+        const trimmed = (text || '').trim();
+        const { src, tgt } = resolveLangPair(trimmed, forcedSourceLang);
+        const cacheKey = `${src}|${tgt}|${trimmed}`;
+        const startMs = performance.now();
+
+        if (state.cache.has(cacheKey)) {
+          const cached = state.cache.get(cacheKey);
+          return { ...cached, latencyMs: Math.max(1, Math.round(performance.now() - startMs)) };
+        }
+
+        // Cancel previous pending request if any
+        if (state.activeController) {
+          state.activeController.abort();
+        }
+        const controller = new AbortController();
+        state.activeController = controller;
+
+        // Timeout helper for snappy fallback
+        const timeoutId = setTimeout(() => controller.abort(), 5500);
+
+        try {
+          const translated = await translateViaGoogleGtx(trimmed, src, tgt, controller.signal);
+          clearTimeout(timeoutId);
+          const result = { text: translated, src, tgt, engine: '在线神经翻译', offline: false };
+          state.cache.set(cacheKey, result);
+          updateEngineBadge('在线神经翻译', false);
+          return { ...result, latencyMs: Math.round(performance.now() - startMs) };
+        } catch (err1) {
+          if (err1 && err1.name === 'AbortError' && state.activeController !== controller) {
+            throw err1; // Superseded by a newer request
+          }
+          // Try secondary online provider
+          const fallbackController = new AbortController();
+          const fbTimeout = setTimeout(() => fallbackController.abort(), 5000);
+          try {
+            const translated = await translateViaMyMemory(trimmed, src, tgt, fallbackController.signal);
+            clearTimeout(fbTimeout);
+            const result = { text: translated, src, tgt, engine: '备用在线引擎', offline: false };
+            state.cache.set(cacheKey, result);
+            updateEngineBadge('备用在线引擎', false);
+            return { ...result, latencyMs: Math.round(performance.now() - startMs) };
+          } catch (err2) {
+            clearTimeout(fbTimeout);
+            // Fall back to offline phrasebook
+            const offlineMatch = lookupOfflineTranslation(trimmed, src, tgt);
+            updateEngineBadge('离线词库模式', true);
+            if (offlineMatch) {
+              return {
+                text: offlineMatch.text,
+                src,
+                tgt,
+                engine: offlineMatch.exact ? '离线精选句库' : '离线词典直译',
+                offline: true,
+                latencyMs: Math.round(performance.now() - startMs)
+              };
+            }
+            return {
+              text: `[离线提示] 当前无法连接在线翻译服务，已自动切换至离线模式。请检查网络连接后重试。\n原文 (${langDisplayName(src)})：${trimmed}`,
+              src,
+              tgt,
+              engine: '离线状态',
+              offline: true,
+              failed: true,
+              latencyMs: Math.round(performance.now() - startMs)
+            };
+          }
+        }
+      }
+
+      // =========================================================
+      // 6. Text-to-Speech (SpeechSynthesis)
+      // =========================================================
+      let availableVoices = [];
+      function loadVoices() {
+        if (!('speechSynthesis' in window)) return;
+        availableVoices = window.speechSynthesis.getVoices() || [];
+      }
+      if ('speechSynthesis' in window) {
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+
+      function pickVoice(langCode) {
+        if (!availableVoices.length) loadVoices();
+        const prefix = langCode === 'zh-CN' ? 'zh' : 'en';
+        // Prefer exact locale match first
+        const exact = availableVoices.find(v => v.lang && v.lang.toLowerCase() === langCode.toLowerCase());
+        if (exact) return exact;
+        return availableVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(prefix)) || null;
+      }
+
+      function stopSpeaking() {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        state.isSpeaking = false;
+        el.btnStopSpeak.classList.add('hidden');
+      }
+
+      function speakText(text, langCode) {
+        const cleaned = (text || '').trim();
+        if (!cleaned) return;
+        if (!('speechSynthesis' in window)) {
+          showToast('当前浏览器不支持语音朗读');
+          return;
+        }
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(cleaned);
+        utter.lang = langCode;
+        utter.rate = state.speechRate;
+        const voice = pickVoice(langCode);
+        if (voice) utter.voice = voice;
+
+        utter.onstart = () => {
+          state.isSpeaking = true;
+          el.btnStopSpeak.classList.remove('hidden');
+        };
+        utter.onend = () => {
+          state.isSpeaking = false;
+          el.btnStopSpeak.classList.add('hidden');
+        };
+        utter.onerror = () => {
+          state.isSpeaking = false;
+          el.btnStopSpeak.classList.add('hidden');
+        };
+        window.speechSynthesis.speak(utter);
+      }
+
+      // =========================================================
+      // 7. Speech-to-Text (Web Speech API)
+      // =========================================================
+      const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+      function stopListening() {
+        if (state.recognition) {
+          try {
+            state.recognition.onend = null;
+            state.recognition.stop();
+          } catch (e) {
+            // Ignore stop errors
+          }
+          state.recognition = null;
+        }
+        state.isListening = false;
+        state.listeningContext = null;
+        renderMicState();
+      }
+
+      function renderMicState() {
+        // Standard mic button
+        const stdActive = state.isListening && state.listeningContext === 'standard';
+        el.btnMicStandard.classList.toggle('btn-voice-active', stdActive);
+        el.micIconIdle.classList.toggle('hidden', stdActive);
+        el.micWaveActive.classList.toggle('hidden', !stdActive);
+        el.micWaveActive.classList.toggle('inline-flex', stdActive);
+        el.micLabel.textContent = stdActive ? '停止聆听' : '语音输入';
+        if (!stdActive) {
+          el.interimPreview.classList.add('hidden');
+        }
+
+        // Dialogue buttons
+        const dlgZhActive = state.isListening && state.listeningContext === 'dialogue-zh';
+        const dlgEnActive = state.isListening && state.listeningContext === 'dialogue-en';
+        el.btnDialogueZh.classList.toggle('btn-voice-active', dlgZhActive);
+        el.btnDialogueEn.classList.toggle('btn-voice-active', dlgEnActive);
+        el.btnDialogueZh.querySelector('span').textContent = dlgZhActive ? '正在聆听中文 · 点击停止' : '说中文 · 译英文';
+        el.btnDialogueEn.querySelector('span').textContent = dlgEnActive ? 'Listening English · Stop' : 'Speak English · 译中文';
+
+        if (!dlgZhActive && !dlgEnActive) {
+          el.dialogueInterimBar.classList.add('hidden');
+        }
+      }
+
+      function startListening(context, langCode) {
+        if (!SpeechRecognitionCtor) {
+          showVoiceNotice('当前浏览器暂不支持原生语音识别（建议使用最新版 Chrome、Edge 或 Safari 打开本应用），文字自动翻译与语音朗读仍可正常使用。');
+          return;
+        }
+
+        if (state.isListening) {
+          const sameContext = state.listeningContext === context;
+          stopListening();
+          if (sameContext) return;
+        }
+
+        hideVoiceNotice();
+        stopSpeaking();
+
+        try {
+          const rec = new SpeechRecognitionCtor();
+          rec.lang = langCode;
+          rec.continuous = context === 'standard';
+          rec.interimResults = true;
+          rec.maxAlternatives = 1;
+
+          let baseText = context === 'standard' ? el.sourceInput.value.trim() : '';
+          let committedFinal = '';
+
+          rec.onstart = () => {
+            state.isListening = true;
+            state.listeningContext = context;
+            renderMicState();
+            if (context === 'standard') {
+              el.interimPreview.classList.remove('hidden');
+              el.interimText.textContent = langCode === 'zh-CN' ? '正在聆听中文...' : 'Listening in English...';
+            } else {
+              el.dialogueInterimBar.classList.remove('hidden');
+              el.dialogueInterimText.textContent = langCode === 'zh-CN' ? '正在聆听中文，请说话...' : 'Listening in English, please speak...';
+            }
+          };
+
+          rec.onresult = (event) => {
+            let interim = '';
+            let newFinal = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                newFinal += transcript;
+              } else {
+                interim += transcript;
+              }
+            }
+
+            if (context === 'standard') {
+              if (newFinal) {
+                committedFinal = (committedFinal + (committedFinal && langCode === 'en-US' ? ' ' : '') + newFinal).trim();
+              }
+              const combined = [baseText, committedFinal, interim].filter(Boolean).join(langCode === 'en-US' ? ' ' : '');
+              el.sourceInput.value = combined;
+              updateCharCount();
+              el.interimText.textContent = interim ? `识别中：${interim}` : '正在聆听...';
+              if (newFinal) {
+                triggerStandardTranslation(true, true);
+              } else if (interim) {
+                scheduleStandardTranslation(false);
+              }
+            } else {
+              const liveText = (newFinal || interim).trim();
+              if (liveText) {
+                el.dialogueInterimText.textContent = liveText;
+              }
+              if (newFinal.trim()) {
+                handleDialogueUtterance(newFinal.trim(), langCode);
+              }
+            }
+          };
+
+          rec.onerror = (event) => {
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+              showVoiceNotice('麦克风权限未开启。请在浏览器地址栏允许访问麦克风后重试。');
+            } else if (event.error === 'no-speech') {
+              showToast('未检测到语音输入');
+            } else if (event.error !== 'aborted') {
+              showToast(`语音识别中断 (${event.error})`);
+            }
+            stopListening();
+          };
+
+          rec.onend = () => {
+            state.isListening = false;
+            state.listeningContext = null;
+            state.recognition = null;
+            renderMicState();
+          };
+
+          state.recognition = rec;
+          rec.start();
+        } catch (err) {
+          showVoiceNotice('无法启动语音识别，请确认当前环境支持麦克风权限。');
+          stopListening();
+        }
+      }
+
+      // =========================================================
+      // 8. Standard Mode Translation Flow
+      // =========================================================
+      function updateCharCount() {
+        const len = el.sourceInput.value.length;
+        el.charCount.textContent = `${len} / 3000`;
+      }
+
+      function updateDirectionLabels(text) {
+        const trimmed = (text || '').trim();
+        if (!trimmed) {
+          if (state.direction === 'auto') {
+            el.sourceLangTag.textContent = '自动检测';
+            el.detectedHint.textContent = '输入中文或英文即刻翻译';
+            el.targetLangTag.textContent = '译文';
+          } else if (state.direction === 'zh-en') {
+            el.sourceLangTag.textContent = '中文';
+            el.detectedHint.textContent = '固定方向：中文 → 英文';
+            el.targetLangTag.textContent = 'English';
+          } else {
+            el.sourceLangTag.textContent = 'English';
+            el.detectedHint.textContent = '固定方向：英文 → 中文';
+            el.targetLangTag.textContent = '中文';
+          }
+          return;
+        }
+
+        const { src, tgt } = resolveLangPair(trimmed);
+        el.sourceLangTag.textContent = state.direction === 'auto'
+          ? `检测到 ${langDisplayName(src)}`
+          : langDisplayName(src);
+        el.detectedHint.textContent = state.direction === 'auto'
+          ? `自动译为 ${langDisplayName(tgt)}`
+          : `固定方向：${langDisplayName(src)} → ${langDisplayName(tgt)}`;
+        el.targetLangTag.textContent = langDisplayName(tgt);
+      }
+
+      function scheduleStandardTranslation(allowAutoSpeak) {
+        clearTimeout(state.debounceTimer);
+        const text = el.sourceInput.value.trim();
+        updateDirectionLabels(text);
+        if (!text) {
+          resetTargetPanel();
+          return;
+        }
+        el.statusIndicator.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-[#0F5C4D] border-t-transparent rounded-full spin-slow"></span><span>实时翻译中...</span>';
+        state.debounceTimer = setTimeout(() => {
+          triggerStandardTranslation(allowAutoSpeak, false);
+        }, 420);
+      }
+
+      function resetTargetPanel() {
+        state.lastSourceText = '';
+        state.lastTranslatedText = '';
+        el.targetOutput.innerHTML = '<span class="text-[#8A909E]">翻译结果将在此实时呈现...</span>';
+        el.outputCharCount.textContent = '0 字符';
+        el.statusIndicator.textContent = '等待输入';
+        el.translationMeta.classList.add('hidden');
+      }
+
+      async function triggerStandardTranslation(shouldAutoSpeak, saveToHistoryNow) {
+        const text = el.sourceInput.value.trim();
+        if (!text) {
+          resetTargetPanel();
+          return;
+        }
+        updateDirectionLabels(text);
+        el.statusIndicator.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-[#0F5C4D] border-t-transparent rounded-full spin-slow"></span><span>正在翻译...</span>';
+
+        try {
+          const res = await performTranslation(text);
+          // Guard if input changed while waiting
+          if (el.sourceInput.value.trim() !== text) return;
+
+          state.lastSourceText = text;
+          state.lastTranslatedText = res.text;
+          state.lastSourceLang = res.src;
+          state.lastTargetLang = res.tgt;
+
+          el.targetOutput.textContent = res.text;
+          el.outputCharCount.textContent = `${res.text.length} 字符`;
+          el.statusIndicator.textContent = res.failed ? '离线提示' : '已完成';
+          el.metaSourceInfo.textContent = `${langDisplayName(res.src)} → ${langDisplayName(res.tgt)} · ${res.engine}`;
+          el.metaLatency.textContent = `${res.latencyMs} ms`;
+          el.translationMeta.classList.remove('hidden');
+
+          if (!res.failed) {
+            addHistoryItem({
+              source: text,
+              target: res.text,
+              srcLang: res.src,
+              tgtLang: res.tgt,
+              ts: Date.now()
+            });
+            if (shouldAutoSpeak && state.autoSpeak) {
+              speakText(res.text, res.tgt);
+            }
+          }
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          el.statusIndicator.textContent = '翻译出错';
+        }
+      }
+
+      // =========================================================
+      // 9. Dialogue Mode Flow
+      // =========================================================
+      async function handleDialogueUtterance(text, forcedSourceLang) {
+        const trimmed = (text || '').trim();
+        if (!trimmed) return;
+
+        el.dialogueEmpty.classList.add('hidden');
+        const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const { src, tgt } = resolveLangPair(trimmed, forcedSourceLang);
+
+        const msgObj = {
+          id,
+          source: trimmed,
+          target: '正在翻译...',
+          srcLang: src,
+          tgtLang: tgt,
+          ts: Date.now(),
+          pending: true
+        };
+        state.dialogueMessages.push(msgObj);
+        renderDialogueStream();
+
+        try {
+          const res = await performTranslation(trimmed, forcedSourceLang);
+          msgObj.target = res.text;
+          msgObj.srcLang = res.src;
+          msgObj.tgtLang = res.tgt;
+          msgObj.pending = false;
+          renderDialogueStream();
+
+          if (!res.failed) {
+            addHistoryItem({
+              source: trimmed,
+              target: res.text,
+              srcLang: res.src,
+              tgtLang: res.tgt,
+              ts: msgObj.ts
+            });
+            if (state.autoSpeak) {
+              speakText(res.text, res.tgt);
+            }
+          }
+        } catch (err) {
+          msgObj.target = '翻译失败，请重试';
+          msgObj.pending = false;
+          renderDialogueStream();
+        }
+      }
+
+      function renderDialogueStream() {
+        if (!state.dialogueMessages.length) {
+          el.dialogueStream.innerHTML = '';
+          el.dialogueStream.appendChild(el.dialogueEmpty);
+          el.dialogueEmpty.classList.remove('hidden');
+          return;
+        }
+
+        const html = state.dialogueMessages.map(msg => {
+          const isZh = msg.srcLang === 'zh-CN';
+          const alignClass = isZh ? 'items-start' : 'items-end';
+          const bubbleBg = isZh
+            ? 'bg-white border-[#E4E1D8]'
+            : 'bg-[#EEF5F2] border-[#CBE2DB]';
+          const tagText = isZh ? '中文 → English' : 'English → 中文';
+
+          return `
+            <div class="flex flex-col ${alignClass} gap-1">
+              <div class="max-w-[90%] sm:max-w-[80%] rounded-2xl border ${bubbleBg} p-3.5 shadow-xs">
+                <div class="flex items-center justify-between gap-4 mb-1.5">
+                  <span class="text-[11px] font-semibold tracking-wide text-[#0F5C4D]">${tagText}</span>
+                  <span class="text-[11px] text-[#8A909E]">${formatTime(msg.ts)}</span>
+                </div>
+                <p class="text-sm text-[#5B616E] leading-relaxed">${escapeHtml(msg.source)}</p>
+                <div class="my-2 border-t border-[#E4E1D8]/80"></div>
+                <p class="text-[15px] font-medium text-[#17191E] leading-relaxed">${escapeHtml(msg.target)}</p>
+                ${msg.pending ? '' : `
+                  <div class="mt-2.5 flex items-center justify-end gap-1.5">
+                    <button type="button" data-action="speak-dlg" data-id="${msg.id}" class="btn-ghost px-2 py-1 rounded-md text-xs inline-flex items-center gap-1">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                      </svg>
+                      <span>朗读</span>
+                    </button>
+                    <button type="button" data-action="copy-dlg" data-id="${msg.id}" class="btn-ghost px-2 py-1 rounded-md text-xs">
+                      复制
+                    </button>
+                  </div>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        el.dialogueStream.innerHTML = html;
+        el.dialogueStream.scrollTop = el.dialogueStream.scrollHeight;
+      }
+
+      // =========================================================
+      // 10. History Management
+      // =========================================================
+      function saveHistory() {
+        try {
+          localStorage.setItem('yijing_translate_history_v1', JSON.stringify(state.history));
+        } catch (e) {
+          // Ignore storage errors
+        }
+      }
+
+      function addHistoryItem(item) {
+        // Avoid duplicating identical consecutive entry
+        if (state.history.length > 0 && state.history[0].source === item.source && state.history[0].tgtLang === item.tgtLang) {
+          state.history[0].target = item.target;
+          state.history[0].ts = item.ts;
+        } else {
+          state.history.unshift({ id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, ...item });
+          if (state.history.length > 30) state.history.pop();
+        }
+        saveHistory();
+        renderHistory();
+      }
+
+      function renderHistory() {
+        const count = state.history.length;
+        if (count > 0) {
+          el.historyCount.textContent = String(count);
+          el.historyCount.classList.remove('hidden');
+        } else {
+          el.historyCount.classList.add('hidden');
+        }
+
+        if (!count) {
+          el.historyList.innerHTML = '<div class="p-6 text-center text-xs text-[#8A909E]">暂无翻译记录。开始输入或语音翻译后会自动保存于此。</div>';
+          return;
+        }
+
+        el.historyList.innerHTML = state.history.map(item => `
+          <div class="px-4 py-3 hover:bg-[#FAF9F6] transition-colors flex items-start justify-between gap-3">
+            <button type="button" data-action="restore-history" data-id="${item.id}" class="flex-1 text-left min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[11px] font-medium text-[#0F5C4D] bg-[#E8F2EF] px-1.5 py-0.5 rounded">${langDisplayName(item.srcLang)} → ${langDisplayName(item.tgtLang)}</span>
+                <span class="text-[11px] text-[#8A909E]">${formatTime(item.ts)}</span>
+              </div>
+              <p class="text-xs text-[#5B616E] truncate">${escapeHtml(item.source)}</p>
+              <p class="text-sm font-medium text-[#17191E] truncate mt-0.5">${escapeHtml(item.target)}</p>
+            </button>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" data-action="speak-history" data-id="${item.id}" class="btn-ghost p-1.5 rounded-lg" title="朗读译文" aria-label="朗读译文">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+              </button>
+              <button type="button" data-action="copy-history" data-id="${item.id}" class="btn-ghost p-1.5 rounded-lg" title="复制译文" aria-label="复制译文">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // =========================================================
+      // 11. UI Mode & Direction Switching
+      // =========================================================
+      function switchMode(mode) {
+        if (state.isListening) stopListening();
+        state.mode = mode;
+        const isStd = mode === 'standard';
+        el.viewStandard.classList.toggle('hidden', !isStd);
+        el.viewDialogue.classList.toggle('hidden', isStd);
+        el.viewDialogue.classList.toggle('flex', !isStd);
+
+        el.tabStandard.classList.toggle('tab-active', isStd);
+        el.tabStandard.classList.toggle('tab-inactive', !isStd);
+        el.tabDialogue.classList.toggle('tab-active', !isStd);
+        el.tabDialogue.classList.toggle('tab-inactive', isStd);
+      }
+
+      function setDirection(dir) {
+        state.direction = dir;
+        el.dirBtns.forEach(btn => {
+          const active = btn.dataset.dir === dir;
+          btn.className = active
+            ? 'dir-btn px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-colors bg-[#0F5C4D] text-white'
+            : 'dir-btn px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-colors text-[#5B616E] hover:text-[#17191E]';
+        });
+
+        // Sync voice input language when direction is locked
+        if (dir === 'zh-en') {
+          state.voiceInputLang = 'zh-CN';
+          el.selectVoiceLang.value = 'zh-CN';
+        } else if (dir === 'en-zh') {
+          state.voiceInputLang = 'en-US';
+          el.selectVoiceLang.value = 'en-US';
+        }
+
+        updateDirectionLabels(el.sourceInput.value);
+        if (el.sourceInput.value.trim()) {
+          triggerStandardTranslation(false, false);
+        }
+      }
+
+      function renderSamplePhrases() {
+        el.samplePhrases.innerHTML = SAMPLE_CHIPS.map((item, idx) => `
+          <button
+            type="button"
+            data-sample-idx="${idx}"
+            class="px-3 py-1.5 rounded-full text-xs border border-[#E4E1D8] bg-[#FAF9F6] text-[#17191E] hover:border-[#0F5C4D] hover:bg-[#E8F2EF] hover:text-[#0F5C4D] transition-colors text-left"
+          >
+            <span class="font-semibold mr-1.5 text-[#0F5C4D]">${escapeHtml(item.label)}</span>
+            <span class="text-[#5B616E]">${escapeHtml(item.text)}</span>
+          </button>
+        `).join('');
+      }
+
+      // =========================================================
+      // 12. Event Listeners
+      // =========================================================
+      el.tabStandard.addEventListener('click', () => switchMode('standard'));
+      el.tabDialogue.addEventListener('click', () => switchMode('dialogue'));
+
+      el.dirBtns.forEach(btn => {
+        btn.addEventListener('click', () => setDirection(btn.dataset.dir));
+      });
+
+      el.btnSwap.addEventListener('click', () => {
+        if (state.direction === 'zh-en') setDirection('en-zh');
+        else if (state.direction === 'en-zh') setDirection('zh-en');
+
+        if (state.lastTranslatedText && !state.lastTranslatedText.startsWith('[离线提示]')) {
+          el.sourceInput.value = state.lastTranslatedText;
+          updateCharCount();
+          triggerStandardTranslation(false, false);
+        } else {
+          showToast('已切换语言方向');
+        }
+      });
+
+      el.toggleAutospeak.addEventListener('change', () => {
+        state.autoSpeak = el.toggleAutospeak.checked;
+        showToast(state.autoSpeak ? '已开启自动朗读译文' : '已关闭自动朗读');
+      });
+
+      el.selectRate.addEventListener('change', () => {
+        state.speechRate = parseFloat(el.selectRate.value) || 1.0;
+      });
+
+      el.selectVoiceLang.addEventListener('change', () => {
+        state.voiceInputLang = el.selectVoiceLang.value;
+        if (state.isListening && state.listeningContext === 'standard') {
+          startListening('standard', state.voiceInputLang);
+        }
+      });
+
+      el.sourceInput.addEventListener('input', () => {
+        updateCharCount();
+        scheduleStandardTranslation(false);
+      });
+
+      el.btnTranslateNow.addEventListener('click', () => {
+        clearTimeout(state.debounceTimer);
+        if (!el.sourceInput.value.trim()) {
+          showToast('请先输入需要翻译的内容');
+          el.sourceInput.focus();
+          return;
+        }
+        triggerStandardTranslation(true, true);
+      });
+
+      el.btnMicStandard.addEventListener('click', () => {
+        startListening('standard', state.voiceInputLang);
+      });
+
+      el.btnSpeakSource.addEventListener('click', () => {
+        const txt = el.sourceInput.value.trim();
+        if (!txt) {
+          showToast('原文为空');
+          return;
+        }
+        const { src } = resolveLangPair(txt);
+        speakText(txt, src);
+      });
+
+      el.btnSpeakTarget.addEventListener('click', () => {
+        if (!state.lastTranslatedText) {
+          showToast('暂无可朗读的译文');
+          return;
+        }
+        speakText(state.lastTranslatedText, state.lastTargetLang);
+      });
+
+      el.btnStopSpeak.addEventListener('click', stopSpeaking);
+
+      el.btnCopyTarget.addEventListener('click', () => {
+        copyText(state.lastTranslatedText);
+      });
+
+      el.btnClear.addEventListener('click', () => {
+        if (state.isListening) stopListening();
+        stopSpeaking();
+        el.sourceInput.value = '';
+        updateCharCount();
+        updateDirectionLabels('');
+        resetTargetPanel();
+        el.sourceInput.focus();
+      });
+
+      el.btnUseAsInput.addEventListener('click', () => {
+        if (!state.lastTranslatedText || state.lastTranslatedText.startsWith('[离线提示]')) {
+          showToast('暂无可回译的译文');
+          return;
+        }
+        el.sourceInput.value = state.lastTranslatedText;
+        updateCharCount();
+        if (state.direction === 'zh-en') setDirection('en-zh');
+        else if (state.direction === 'en-zh') setDirection('zh-en');
+        else triggerStandardTranslation(false, false);
+      });
+
+      el.samplePhrases.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-sample-idx]');
+        if (!btn) return;
+        const idx = Number(btn.dataset.sampleIdx);
+        const sample = SAMPLE_CHIPS[idx];
+        if (!sample) return;
+        el.sourceInput.value = sample.text;
+        updateCharCount();
+        triggerStandardTranslation(true, true);
+      });
+
+      // Dialogue controls
+      el.btnDialogueZh.addEventListener('click', () => startListening('dialogue-zh', 'zh-CN'));
+      el.btnDialogueEn.addEventListener('click', () => startListening('dialogue-en', 'en-US'));
+      el.btnStopDialogueMic.addEventListener('click', stopListening);
+
+      el.btnClearDialogue.addEventListener('click', () => {
+        state.dialogueMessages = [];
+        renderDialogueStream();
+        showToast('已清空当前对话');
+      });
+
+      el.dialogueTextForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = el.dialogueTextInput.value.trim();
+        if (!text) return;
+        el.dialogueTextInput.value = '';
+        handleDialogueUtterance(text, null);
+      });
+
+      el.dialogueStream.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const msg = state.dialogueMessages.find(m => m.id === btn.dataset.id);
+        if (!msg) return;
+        if (btn.dataset.action === 'speak-dlg') {
+          speakText(msg.target, msg.tgtLang);
+        } else if (btn.dataset.action === 'copy-dlg') {
+          copyText(msg.target);
+        }
+      });
+
+      // History drawer
+      el.btnToggleHistory.addEventListener('click', () => {
+        state.historyOpen = !state.historyOpen;
+        el.historyPanel.classList.toggle('hidden', !state.historyOpen);
+        if (state.historyOpen) {
+          renderHistory();
+          el.historyPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+
+      el.btnCloseHistory.addEventListener('click', () => {
+        state.historyOpen = false;
+        el.historyPanel.classList.add('hidden');
+      });
+
+      el.btnClearHistory.addEventListener('click', () => {
+        state.history = [];
+        saveHistory();
+        renderHistory();
+        showToast('已清空翻译记录');
+      });
+
+      el.historyList.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const item = state.history.find(h => h.id === btn.dataset.id);
+        if (!item) return;
+        if (btn.dataset.action === 'restore-history') {
+          switchMode('standard');
+          el.sourceInput.value = item.source;
+          updateCharCount();
+          triggerStandardTranslation(false, false);
+        } else if (btn.dataset.action === 'speak-history') {
+          speakText(item.target, item.tgtLang);
+        } else if (btn.dataset.action === 'copy-history') {
+          copyText(item.target);
+        }
+      });
+
+      el.btnCloseNotice.addEventListener('click', hideVoiceNotice);
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          if (state.mode === 'standard' && el.sourceInput.value.trim()) {
+            e.preventDefault();
+            clearTimeout(state.debounceTimer);
+            triggerStandardTranslation(true, true);
+          }
+        } else if (e.key === 'Escape') {
+          if (state.isListening) stopListening();
+          if (state.isSpeaking) stopSpeaking();
+        }
+      });
+
+      // =========================================================
+      // 13. Initial Render
+      // =========================================================
+      renderSamplePhrases();
+      renderHistory();
+      updateDirectionLabels('');
+      updateCharCount();
+    })();
+  </script>
+</body>
+</html>
